@@ -2,11 +2,14 @@
 import argparse
 import subprocess
 import graphitesend
+import time
 
 parser = argparse.ArgumentParser('Checks the latency between this host and a remote host')
 
-parser.add_argument('host', help='The remote host')
-parser.add_argument('count', default="4", help='The number of times to ping.')
+parser.add_argument('server', help='The server to connect to.')
+parser.add_argument('count', help='The number of times to run the ping.')
+parser.add_argument('delta', help='Number of minutes since the last latency test was made.')
+parser.add_argument('granularity', help='The interval in which the data is sent over the delta time frame in minutes.')
 parser.add_argument('--graphite_server', default='graphite', help='The graphite server to use.')
 parser.add_argument('--verbose', action='store_true', help='Print debug messages.')
 
@@ -23,7 +26,7 @@ else:
 assert int(args.count) > 0, "Please specify a count greater than 0."
 
 verboseprint("Initiating ping process...")
-ping = subprocess.Popen(['ping', '-c ' + args.count, args.host], stdout=subprocess.PIPE)
+ping = subprocess.Popen(['ping', '-c', args.count, args.server], stdout=subprocess.PIPE)
 
 verboseprint("Waiting for ping process to finish...")
 ping.wait()
@@ -56,7 +59,16 @@ else:
         verboseprint("Latencies (ms):", latency_dict)
 
         verboseprint("Sending data to graphite...")
-        graphite.send_dict(latency_dict)
+
+        deltaSeconds = int(args.delta) * 60
+        lastEpoch = time.time() - deltaSeconds
+        loops = int(int(args.delta) / int(args.granularity))
+
+        for i in range(0, max(1, loops)):
+            graphite.send_dict(latency_dict, lastEpoch)
+            # Update the time so send over the granularity
+            lastEpoch += 60 * int(args.granularity)
+
         verboseprint("Sent!")
     else:
         verboseprint("No output received.")
