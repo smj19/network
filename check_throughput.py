@@ -1,15 +1,16 @@
-
 #! /usr/bin/env python2.7
 import argparse
 import subprocess
-import socket
+import time
 import graphitesend
 import sys
 
 parser = argparse.ArgumentParser('Checks the throughput between this server and a remote host.')
 
-parser.add_argument('client', help='The host to act as the client.')
-parser.add_argument('time', help='The duration to test the latency for.')
+parser.add_argument('server', help='The server to connect to.')
+parser.add_argument('time', help='The duration to test the bandwidth for in seconds.')
+parser.add_argument('delta', help='The time since the last bandwidth test was made in minutes.')
+parser.add_argument('granularity', help='The interval in which the data is sent over the delta time frame in minutes.')
 parser.add_argument('--graphite_server', default='graphite', help='The graphite server to use.')
 parser.add_argument('--verbose', action='store_true', help="Print debug messages.")
 
@@ -23,34 +24,18 @@ if args.verbose:
 else:
     verboseprint = lambda *a: None
 
-# The client will connect to the script runner.
-SERVER = socket.gethostbyname(socket.gethostname())
+assert args.time > 0, "Time must be a positive integer"
+assert args.delta >= 0, "Delta must not be negative"
+assert args.granularity > 0, "Granularity must be a positive integer"
 
-# Kill any existing processes of iperf on the server
-KILL_SERVER = ['/usr/bin/killall', 'iperf']
+# Connect to the server
+verboseprint('Starting test...')
+test = subprocess.Popen(['iperf', '-c', args.server, '-t', args.time, '-x', 'CMSV', '-y', 'C'], stdout=subprocess.PIPE)
 
-# Starts the server
-SERVER_IPERF = ['iperf', '-s']
+verboseprint('Waiting for test to finish...')
+test.wait()
 
-# Client connects to me
-CLIENT_IPERF = 'iperf -c {SERVER} -t {TIME} -x CMSV -y C'.format(SERVER=SERVER, TIME=args.time)
-
-verboseprint('Killing iperf...')
-subprocess.Popen(KILL_SERVER).wait()
-
-verboseprint('Starting server...')
-server = subprocess.Popen(SERVER_IPERF, stdout=subprocess.PIPE)
-
-verboseprint('Starting client...')
-client = subprocess.Popen(['ssh', '-q', args.client, CLIENT_IPERF], stdout=subprocess.PIPE)
-
-verboseprint('Waiting for client to finish...')
-client.wait()
-
-# Kill the connection to the server
-server.terminate()
-
-stdout, stderr = client.communicate()
+stdout, stderr = test.communicate()
 
 if stderr:
     verboseprint("Error:", stderr)
@@ -62,7 +47,6 @@ kbits = bits / 1000
 
 verboseprint("Bandwidth:", kbits, "kbits/sec")
 
-
 verboseprint("Initiating graphite connection...")
 graphite = graphitesend.init(
     fqdn_squash=True,
@@ -73,6 +57,14 @@ graphite = graphitesend.init(
 )
 
 verboseprint("Sending data to graphite...")
-graphite.send('kbits/sec', kbits)
+
+deltaSeconds = int(args.delta) * 60
+lastEpoch = time.time() - deltaSeconds
+loops = int(int(args.delta) / int(args.granularity))
+
+for i in range(0, max(1, loops)):
+    graphite.send('kbits/sec', kbits, lastEpoch)
+    # Update the time so send over the granularity
+    lastEpoch += 60 * int(args.granularity)
 
 verboseprint("Sent!")
