@@ -1,4 +1,3 @@
-# network
 # Monitoring latency and throughput between Data Centers
 
 ## Description
@@ -6,19 +5,19 @@
 
 ## Cloning
 
-  ```
-   git clone https://github.rp-core.com/cle/check_latency
-  ```
+```
+git clone https://github.rp-core.com/cle/check_latency
+```
 
 ## Requirements
-  ```
-  python2.7 or higher
-    graphitesend
-  ```
+```
+python2.7 or higher
+graphitesend
+```
 Install requirements  with pip
 
 ```
-  $ pip install graphitesend
+pip install graphitesend
 ```
 
 ## Usage
@@ -26,7 +25,6 @@ Install requirements  with pip
 ### Check Latency
 
 ```
-[cle@fopp-mgt0000.lax2 network]$ ./check_latency.py -h
 usage: Checks the latency between this host and a remote host
        [-h] [--graphite_server GRAPHITE_SERVER] [--verbose] host count
 
